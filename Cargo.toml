@@ -7,4 +7,9 @@ repository = "https://github.com/junelife/freertos-sys2"
 documentation = "https://docs.rs/freertos-sys2"
 description = "Low-level bindings to FreeRTOS. User's responsibility to provide the FreeRTOS"
 
+[features]
+default = ["support_static_allocation", "support_dynamic_allocation"]
+support_static_allocation = []
+support_dynamic_allocation = []
+
 [dependencies]

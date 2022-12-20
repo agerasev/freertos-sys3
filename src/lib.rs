@@ -6,117 +6,91 @@
 #![no_std]
 // The types, values, functions, and other items should match the naming used in FreeRTOS
 #![allow(non_camel_case_types, non_upper_case_globals, non_snake_case)]
+#![allow(clippy::missing_safety_doc)]
 #![forbid(unsafe_op_in_unsafe_fn)]
+
+mod config;
+mod projdefs;
+
+pub mod queue;
+pub mod semphr;
+pub mod task;
+
+pub use config::*;
+pub use projdefs::*;
 
 use core::ffi::c_void;
 
-extern "C" {
-    pub fn xTaskGetTickCountFromISR() -> TickType_t;
-    pub fn xTaskGetTickCount() -> TickType_t;
-
-    pub fn xTaskGetCurrentTaskHandle() -> TaskHandle_t;
-
-    pub fn vTaskResume(xTaskToResume: TaskHandle_t);
-    pub fn vTaskSuspend(xTaskToSuspend: TaskHandle_t);
-    pub fn vTaskDelayUntil(pxPreviousWakeTime: *mut TickType_t, xTimeIncrement: TickType_t);
-    pub fn xTaskDelayUntil(
-        pxPreviousWakeTime: *mut TickType_t,
-        xTimeIncrement: TickType_t,
-    ) -> BaseType_t;
-    pub fn vTaskDelay(xTicksToDelay: TickType_t);
-
-    pub fn pvTaskGetThreadLocalStoragePointer(
-        xTaskToQuery: TaskHandle_t,
-        xIndex: BaseType_t,
-    ) -> *mut c_void;
-
-    pub fn vTaskSetThreadLocalStoragePointer(
-        xTaskToSet: TaskHandle_t,
-        xIndex: BaseType_t,
-        pvValue: *mut c_void,
-    );
-
-    pub fn xQueueGenericReceive(
-        xQueue: QueueHandle_t,
-        pvBuffer: *const c_void,
-        xTicksToWait: TickType_t,
-        xJustPeek: BaseType_t,
-    ) -> BaseType_t;
-
-    pub fn xQueueGenericSend(
-        xQueue: QueueHandle_t,
-        pvItemToQueue: *const c_void,
-        xTicksToWait: TickType_t,
-        xCopyPosition: BaseType_t,
-    ) -> BaseType_t;
-
-    /*
-    pub fn xQueueGenericCreateStatic(
-        uxQueueLength: UBaseType_t,
-        uxItemSize: UBaseType_t,
-        pucQueueStorage: *mut u8,
-        pxStaticQueue: *mut StaticQueue_t,
-        ucQueueType: u8,
-    ) -> QueueHandle_t;
-    */
-
-    pub fn xQueueCreateMutex(ucQueueType: u8) -> QueueHandle_t;
-
-    pub fn vQueueDelete(xQueue: QueueHandle_t);
-}
+#[cfg(not(any(
+    feature = "support_static_allocation",
+    feature = "support_dynamic_allocation"
+)))]
+compile_error!(
+    "'support_static_allocation' and 'support_dynamic_allocation' cannot both be disabled."
+);
 
 pub type BaseType_t = i32;
 pub type UBaseType_t = u32;
 
-// FIXME: these function definitions rely on TickType_t being uint32_t, freertos can be configured
-// to use different tick sizes. check `FreeRTOS_config.h`. We may need to provide a feature to
-// adjust this.
-pub type TickType_t = u32;
+#[repr(C)]
+pub struct StaticListItem_t {
+    #[cfg(feature = "use_list_data_integrity_check_bytes")]
+    xDummy1: TickType_t,
+    xDummy2: TickType_t,
+    pvDummy3: [*mut c_void; 4],
+    #[cfg(feature = "use_list_data_integrity_check_bytes")]
+    xDummy4: TickType_t,
+}
 
-pub type TaskHandle_t = *mut c_void;
-pub type QueueHandle_t = *mut c_void;
-pub type SemaphoreHandle_t = *mut c_void;
+#[cfg(feature = "use_mini_list_item")]
+struct StaticMiniListItem_t {
+    #[cfg(feature = "use_list_data_integrity_check_bytes")]
+    xDummy1: TickType_t,
+    xDummy2: TickType_t,
+    pvDummy3: [*mut c_void; 2],
+}
 
-// NOTE: items below here are defined as macros in freertos9, and should be scrutinized if one makes
-// changes to freertos
+#[cfg(not(features = "use_mini_list_item"))]
+pub type StaticMiniListItem_t = StaticListItem_t;
 
-pub const pdFALSE: BaseType_t = 0;
-pub const pdTRUE: BaseType_t = 1;
+#[repr(C)]
+pub struct StaticList_t {
+    #[cfg(feature = "use_list_data_integrity_check_bytes")]
+    xDummy1: TickType_t,
+    uxDummy2: UBaseType_t,
+    pvDummy3: *mut c_void,
+    xDummy4: StaticMiniListItem_t,
+    #[cfg(feature = "use_list_data_integrity_check_bytes")]
+    xDummy5: TickType_t,
+}
 
-pub const queueSEND_TO_BACK: BaseType_t = 0;
-pub const queueSEND_TO_FRONT: BaseType_t = 1;
-pub const queueOVERWRITE: BaseType_t = 2;
+#[repr(C)]
+union StaticQueue__U_t {
+    pvDummy2: *mut c_void,
+    uxDummy2: UBaseType_t,
+}
 
-pub const semGIVE_BLOCK_TIME: TickType_t = 0;
+#[repr(C)]
+pub struct StaticQueue_t {
+    pvDummy1: [*mut c_void; 3],
+    u: StaticQueue__U_t,
+    xDummy3: [StaticList_t; 2],
+    uxDummy4: [UBaseType_t; 3],
+    ucDummy5: [u8; 2],
 
-pub const queueQUEUE_TYPE_BASE: u8 = 0;
-pub const queueQUEUE_TYPE_SET: u8 = 0;
-pub const queueQUEUE_TYPE_MUTEX: u8 = 1;
-pub const queueQUEUE_TYPE_COUNTING_SEMAPHORE: u8 = 2;
-pub const queueQUEUE_TYPE_BINARY_SEMAPHORE: u8 = 3;
-pub const queueQUEUE_TYPE_RECURSIVE_MUTEX: u8 = 4;
+    #[cfg(all(
+        feature = "support_static_allocation",
+        feature = "support_dynamic_allocation"
+    ))]
+    ucDummy6: u8,
+
+    #[cfg(feature = "use_queue_sets")]
+    pvDummy7: *mut c_void,
+
+    #[cfg(feature = "use_trace_facility")]
+    uxDummy8: UBaseType_t,
+    #[cfg(feature = "use_trace_facility")]
+    ucDummy9: u8,
+}
 
 pub const portMAX_DELAY: TickType_t = TickType_t::MAX;
-
-pub unsafe fn xSemaphoreTake(xSemaphore: SemaphoreHandle_t, xBlockTime: TickType_t) -> BaseType_t {
-    unsafe { xQueueGenericReceive(xSemaphore, core::ptr::null(), xBlockTime, pdFALSE) }
-}
-
-pub unsafe fn xSemaphoreGive(xSemaphore: SemaphoreHandle_t) -> BaseType_t {
-    unsafe {
-        xQueueGenericSend(
-            xSemaphore,
-            core::ptr::null(),
-            semGIVE_BLOCK_TIME,
-            queueSEND_TO_BACK,
-        )
-    }
-}
-
-pub unsafe fn xSemaphoreCreateMutex() -> SemaphoreHandle_t {
-    unsafe { xQueueCreateMutex(queueQUEUE_TYPE_MUTEX) }
-}
-
-pub unsafe fn vSemaphoreDelete(xSemaphore: SemaphoreHandle_t) {
-    unsafe { vQueueDelete(xSemaphore) }
-}
