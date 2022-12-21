@@ -2,9 +2,10 @@
 name = "freertos-sys2"
 version = "0.2.0"
 edition = "2021"
+authors = ["Alexey Gerasev <alexey.gerasev@gmail.com>"]
 license = "Apache-2.0 OR MIT"
-repository = "https://github.com/junelife/freertos-sys2"
-documentation = "https://docs.rs/freertos-sys2"
+repository = "https://github.com/agerasev/freertos-sys3"
+documentation = "https://docs.rs/freertos-sys3"
 description = "Low-level bindings to FreeRTOS. User's responsibility to provide the FreeRTOS"
 
 [features]
