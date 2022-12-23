@@ -2,7 +2,7 @@ use crate::{queue::*, *};
 
 pub const semGIVE_BLOCK_TIME: TickType_t = 0;
 
-pub type SemaphoreHandle_t = *mut c_void;
+pub type SemaphoreHandle_t = QueueHandle_t;
 pub type StaticSemaphore_t = StaticQueue_t;
 
 pub unsafe fn xSemaphoreTake(xSemaphore: SemaphoreHandle_t, xBlockTime: TickType_t) -> BaseType_t {
